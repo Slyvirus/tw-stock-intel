@@ -52,6 +52,16 @@ html, body, [class*="css"] { font-family: -apple-system, BlinkMacSystemFont, "Se
                          color:#ffffff !important; }
 .signal-header-yellow * { color:#ffffff !important; }
 
+/* 賣超訊號標題 */
+.signal-header-blue { background:#0d1f3c; border-left:4px solid #4a9eff;
+                       padding:8px 16px; border-radius:6px; margin:16px 0 8px;
+                       color:#ffffff !important; }
+.signal-header-blue * { color:#ffffff !important; }
+.signal-header-cyan { background:#0d2a2a; border-left:4px solid #22d3ee;
+                       padding:8px 16px; border-radius:6px; margin:16px 0 8px;
+                       color:#ffffff !important; }
+.signal-header-cyan * { color:#ffffff !important; }
+
 /* 資料來源標注 */
 .source-bar {
     background: #0d1117;
@@ -283,27 +293,66 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── 計數卡 ───────────────────────────────────────────────
-strong = df[df['signal_strength'] == 'strong']
-medium = df[df['signal_strength'] == 'medium']
-watch  = df[df['signal_strength'] == 'watch']
+strong    = df[df['signal_strength'] == 'strong']
+medium    = df[df['signal_strength'] == 'medium']
+watch     = df[df['signal_strength'] == 'watch']
+sell_s    = df[df['sell_strength']   == 'strong']
+sell_m    = df[df['sell_strength']   == 'medium']
+sell_w    = df[df['sell_strength']   == 'watch']
 
+st.caption("**▲ 買超訊號**")
 c1, c2, c3 = st.columns(3)
-c1.metric("🔴 強訊號", f"{len(strong)} 檔", help="三大法人齊買 或 外資連買 ≥5 日")
-c2.metric("🟡 中訊號", f"{len(medium)} 檔", help="外資+投信同買 或 外資連買 ≥3 日")
-c3.metric("⚪ 觀察中", f"{len(watch)} 檔",  help="外資或投信單邊買超")
+c1.metric("🔴 強買訊號", f"{len(strong)} 檔", help="三大法人齊買 或 外資連買 ≥5 日")
+c2.metric("🟡 中買訊號", f"{len(medium)} 檔", help="外資+投信同買 或 外資連買 ≥3 日")
+c3.metric("⚪ 買超觀察", f"{len(watch)} 檔",  help="外資或投信單邊買超")
 
-# ── 訊號清單 ─────────────────────────────────────────────
+st.caption("**▼ 賣超訊號**")
+d1, d2, d3 = st.columns(3)
+d1.metric("🔵 強賣訊號", f"{len(sell_s)} 檔", help="三大法人齊賣 或 外資連賣 ≥5 日")
+d2.metric("🔷 中賣訊號", f"{len(sell_m)} 檔", help="外資+投信同賣 或 外資連賣 ≥3 日")
+d3.metric("○ 賣超觀察", f"{len(sell_w)} 檔",  help="外資或投信單邊賣超")
+
+# ── 買超訊號清單 ──────────────────────────────────────────
+st.subheader("▲ 買超訊號")
 if not strong.empty:
-    st.markdown('<div class="signal-header-red"><strong>🔴 強訊號</strong>　三大法人齊買 或 外資連買 ≥5 日</div>', unsafe_allow_html=True)
+    st.markdown('<div class="signal-header-red"><strong>🔴 強買訊號</strong>　三大法人齊買 或 外資連買 ≥5 日</div>', unsafe_allow_html=True)
     render_table(strong)
 
 if not medium.empty:
-    st.markdown('<div class="signal-header-yellow"><strong>🟡 中訊號</strong>　外資 + 投信同日買超</div>', unsafe_allow_html=True)
+    st.markdown('<div class="signal-header-yellow"><strong>🟡 中買訊號</strong>　外資 + 投信同日買超</div>', unsafe_allow_html=True)
     render_table(medium)
 
 if not watch.empty:
-    with st.expander(f"⚪ 觀察中（{len(watch)} 檔）"):
+    with st.expander(f"⚪ 買超觀察（{len(watch)} 檔）"):
         render_table(watch)
+
+# ── 賣超訊號清單 ──────────────────────────────────────────
+st.subheader("▼ 賣超訊號")
+SELL_COLS = {
+    'stock_id':            '代號',
+    'stock_name':          '名稱',
+    'foreign_net':         '外資（張）',
+    'trust_net':           '投信（張）',
+    'dealer_net':          '自營（張）',
+    'total_net':           '三大合計（張）',
+    'foreign_sell_consec': '外資連賣天數',
+}
+
+def render_sell_table(sub_df):
+    display = sub_df[list(SELL_COLS.keys())].rename(columns=SELL_COLS)
+    st.dataframe(display, use_container_width=True, hide_index=True)
+
+if not sell_s.empty:
+    st.markdown('<div class="signal-header-blue"><strong>🔵 強賣訊號</strong>　三大法人齊賣 或 外資連賣 ≥5 日</div>', unsafe_allow_html=True)
+    render_sell_table(sell_s.sort_values('total_net'))
+
+if not sell_m.empty:
+    st.markdown('<div class="signal-header-cyan"><strong>🔷 中賣訊號</strong>　外資 + 投信同日賣超</div>', unsafe_allow_html=True)
+    render_sell_table(sell_m.sort_values('total_net'))
+
+if not sell_w.empty:
+    with st.expander(f"○ 賣超觀察（{len(sell_w)} 檔）"):
+        render_sell_table(sell_w.sort_values('total_net'))
 
 # ── 個股詳細 ─────────────────────────────────────────────
 st.divider()
