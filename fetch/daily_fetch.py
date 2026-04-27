@@ -88,8 +88,8 @@ def fetch_twse(date_str: str) -> pd.DataFrame | None:
 
 
 def get_last_trading_date() -> str | None:
-    """往前找最近 7 天內的最後交易日"""
-    for i in range(1, 8):
+    """找最近有資料的交易日（從今天開始往前找，今天 17:30 後資料已在 TWSE）"""
+    for i in range(0, 8):
         date = datetime.date.today() - datetime.timedelta(days=i)
         date_str = date.strftime('%Y%m%d')
         params = {'date': date_str, 'selectType': 'ALLBUT0999', 'response': 'json'}
