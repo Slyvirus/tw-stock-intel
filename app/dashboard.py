@@ -182,21 +182,30 @@ def render_chart(stock_id: str, stock_name: str):
 
 
 def render_pie(row: pd.Series):
-    """三大法人買超佔比圓餅圖（僅顯示正數方，即實際買超方）"""
-    labels, values, colors = [], [], []
-    mapping = [
-        ('外資', float(row['foreign_net']), '#4a9eff'),
-        ('投信', float(row['trust_net']),   '#ffd93d'),
-        ('自營商', float(row['dealer_net']), '#6bcb77'),
-    ]
-    for name, val, color in mapping:
-        if val > 0:
-            labels.append(name)
-            values.append(val)
-            colors.append(color)
+    """三大法人買超或賣超佔比圓餅圖"""
+    f, t, d = float(row['foreign_net']), float(row['trust_net']), float(row['dealer_net'])
+
+    # 判斷顯示買超佔比還是賣超佔比
+    buy_total  = sum(v for v in [f, t, d] if v > 0)
+    sell_total = sum(abs(v) for v in [f, t, d] if v < 0)
+
+    if buy_total >= sell_total:
+        # 以買超為主，顯示買超方佔比
+        mapping = [('外資', f, '#4a9eff'), ('投信', t, '#ffd93d'), ('自營商', d, '#6bcb77')]
+        labels = [n for n, v, _ in mapping if v > 0]
+        values = [v for _, v, _ in mapping if v > 0]
+        colors = [c for _, v, c in mapping if v > 0]
+        title  = "各法人買超佔比"
+    else:
+        # 以賣超為主，顯示賣超方佔比（取絕對值）
+        mapping = [('外資', f, '#4a9eff'), ('投信', t, '#22d3ee'), ('自營商', d, '#6bcb77')]
+        labels = [n for n, v, _ in mapping if v < 0]
+        values = [abs(v) for _, v, _ in mapping if v < 0]
+        colors = [c for _, v, c in mapping if v < 0]
+        title  = "各法人賣超佔比"
 
     if not labels:
-        st.caption("今日三大法人均為賣超，無正向買超佔比可顯示。")
+        st.caption("今日三大法人買賣超均為 0，無佔比可顯示。")
         return
 
     fig = go.Figure(go.Pie(
@@ -207,7 +216,7 @@ def render_pie(row: pd.Series):
         textfont=dict(size=13),
     ))
     fig.update_layout(
-        title="各法人買超佔比（僅計買超方）",
+        title=title,
         showlegend=False,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
@@ -216,36 +225,58 @@ def render_pie(row: pd.Series):
         height=280,
     )
     st.plotly_chart(fig, use_container_width=True)
-    st.caption("⚠️ TWSE 僅揭露外資、投信、自營商三大類別合計，無法細分至個別機構名稱（如哪家外資公司）。")
+    st.caption("⚠️ TWSE 僅揭露三大類別合計，無法細分至個別機構名稱。")
 
 
 def render_judge(row: pd.Series, date: str):
-    """個股系統研判區塊（目前為觀察期 placeholder，M5 後升級為建議）"""
-    strength = row['signal_strength']
-    badge_class = {'strong': 'badge-strong', 'medium': 'badge-medium', 'watch': 'badge-watch'}.get(strength, 'badge-watch')
-    badge_label = {'strong': '🔴 強訊號', 'medium': '🟡 中訊號', 'watch': '⚪ 觀察中'}.get(strength, '')
+    """個股系統研判區塊（買超或賣超均適用）"""
+    buy_str  = row.get('signal_strength', None)
+    sell_str = row.get('sell_strength', None)
 
-    f_consec = int(row['foreign_consec'])
-    cross    = bool(row['cross_buy'])
-    all3     = bool(row['all_three_buy'])
-
+    badges_html = ''
     obs = []
-    if all3:
-        obs.append("三大法人同日買超（最強交叉確認）")
-    elif cross:
-        obs.append("外資 + 投信同日買超")
-    if f_consec >= 3:
-        obs.append(f"外資連續買超 {f_consec} 日")
 
-    obs_text = "、".join(obs) if obs else "單邊法人買超"
+    # 買超訊號
+    if pd.notna(buy_str) and buy_str:
+        buy_badge = {'strong': ('badge-strong', '🔴 強買訊號'),
+                     'medium': ('badge-medium', '🟡 中買訊號'),
+                     'watch':  ('badge-watch',  '⚪ 買超觀察')}.get(buy_str, ('badge-watch', ''))
+        badges_html += f'<span class="judge-badge {buy_badge[0]}">{buy_badge[1]}</span> '
+
+        if bool(row.get('all_three_buy', 0)):
+            obs.append("三大法人同日買超")
+        elif bool(row.get('cross_buy', 0)):
+            obs.append("外資＋投信同日買超")
+        f_c = int(row.get('foreign_consec', 0))
+        if f_c >= 3:
+            obs.append(f"外資連續買超 {f_c} 日")
+
+    # 賣超訊號
+    if pd.notna(sell_str) and sell_str:
+        sell_badge = {'strong': ('🔵 強賣訊號', '#4a9eff'),
+                      'medium': ('🔷 中賣訊號', '#22d3ee'),
+                      'watch':  ('○ 賣超觀察', '#666666')}.get(sell_str, ('', '#666'))
+        badges_html += (f'<span class="judge-badge" style="background:#0d1f3c;'
+                        f'color:{sell_badge[1]};border:1px solid {sell_badge[1]};">'
+                        f'{sell_badge[0]}</span>')
+
+        if bool(row.get('all_three_sell', 0)):
+            obs.append("三大法人同日賣超")
+        elif bool(row.get('cross_sell', 0)):
+            obs.append("外資＋投信同日賣超")
+        f_sc = int(row.get('foreign_sell_consec', 0))
+        if f_sc >= 3:
+            obs.append(f"外資連續賣超 {f_sc} 日")
+
+    obs_text = "、".join(obs) if obs else "單邊法人動作"
 
     st.markdown(f"""
 <div class="judge-card">
   <h4>📋 系統研判</h4>
-  <span class="judge-badge {badge_class}">{badge_label}</span>
+  {badges_html}
   <p style="color:#ccc; font-size:0.88rem; margin:10px 0 4px;">觀察到：{obs_text}</p>
   <p class="judge-note">
-    ⚠️ 目前處於資料累積期（第 1 週），進出場建議功能將在累積 4 週歷史資料、準確率驗證達標後啟用。<br>
+    ⚠️ 目前處於資料累積期，進出場建議將在 4 週資料驗證後啟用。<br>
     建議搭配 <a href="https://www.twse.com.tw/rwd/zh/fund/T86?date={date.replace('-','')}&selectType=ALLBUT0999&response=json"
     target="_blank" style="color:#4a9eff;">TWSE 原始資料</a> 自行判斷。
   </p>
@@ -273,12 +304,19 @@ st.markdown(f"""
   <p><strong>篩選邏輯：</strong>每天自動掃描台灣全市場約 1,300 支上市個股，
   抓取三大法人當日的買賣超張數，計算哪些個股同時被多家法人買進，
   再根據強度分級顯示：</p>
+  <p><strong>▲ 買超訊號（法人正在進場）：</strong></p>
   <p>
-    <span class="tag-red">🔴 強訊號</span> 外資＋投信＋自營商三方同日買超，或外資連續買超 5 天以上 → 最優先關注<br>
-    <span class="tag-yellow">🟡 中訊號</span> 外資＋投信同一天都在買，或外資連買 3 天以上 → 值得追蹤<br>
-    <span class="tag-grey">⚪ 觀察中</span> 單邊法人買超（僅外資或僅投信）→ 列入候補清單
+    <span class="tag-red">🔴 強買訊號</span> 外資＋投信＋自營商三方同日買超，或外資連續買超 5 天以上 → 最優先關注<br>
+    <span class="tag-yellow">🟡 中買訊號</span> 外資＋投信同一天都在買，或外資連買 3 天以上 → 值得追蹤<br>
+    <span class="tag-grey">⚪ 買超觀察</span> 單邊法人買超（僅外資或僅投信）→ 列入候補清單
   </p>
-  <p><strong>怎麼用：</strong>看訊號清單 → 選感興趣的個股 → 下方查看法人走勢圖與買超佔比 → 點連結核對 TWSE 官方原始資料。</p>
+  <p><strong>▼ 賣超訊號（法人正在出場，留意風險）：</strong></p>
+  <p>
+    <span style="color:#4a9eff;font-weight:600;">🔵 強賣訊號</span> 外資＋投信＋自營商三方同日賣超，或外資連續賣超 5 天以上 → 避開或減碼參考<br>
+    <span style="color:#22d3ee;font-weight:600;">🔷 中賣訊號</span> 外資＋投信同一天都在賣，或外資連賣 3 天以上 → 觀察是否持續<br>
+    <span style="color:#666;font-weight:600;">○ 賣超觀察</span> 單邊法人賣超 → 注意但不必過度反應
+  </p>
+  <p><strong>怎麼用：</strong>看訊號清單 → 選感興趣的個股 → 下方查看法人走勢圖與買賣超佔比 → 點連結核對 TWSE 官方原始資料。</p>
   <p class="warning">⚠️ 此工具為決策輔助，非買賣指令。注意：外資／投信／自營商為類別合計，TWSE 不揭露個別機構名稱。資料 T+1，每個交易日 17:30 後自動更新。</p>
 </div>
 """, unsafe_allow_html=True)
