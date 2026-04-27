@@ -1,0 +1,39 @@
+name: Daily Institutional Data Fetch
+
+on:
+  schedule:
+    - cron: '30 9 * * 1-5'  # 每週一至週五 17:30 台北時間（UTC+8 → UTC 09:30）
+  workflow_dispatch:          # 允許手動在 GitHub 上點按觸發
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pandas tqdm
+
+      - name: Restore database from cache
+        uses: actions/cache@v4
+        with:
+          path: data/stocks.db
+          key: stocks-db-${{ github.run_number }}
+          restore-keys: stocks-db-
+
+      - name: Run fetch script
+        run: python fetch/daily_fetch.py
+
+      - name: Save updated database to cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/stocks.db
+          key: stocks-db-${{ github.run_number }}
