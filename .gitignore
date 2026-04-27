@@ -1,6 +1,4 @@
 venv/
-data/stocks.db
-data/*.db
 .env
 __pycache__/
 *.pyc

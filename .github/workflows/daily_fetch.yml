@@ -2,12 +2,14 @@ name: Daily Institutional Data Fetch
 
 on:
   schedule:
-    - cron: '30 9 * * 1-5'  # 每週一至週五 17:30 台北時間（UTC+8 → UTC 09:30）
-  workflow_dispatch:          # 允許手動在 GitHub 上點按觸發
+    - cron: '30 9 * * 1-5'  # 週一至週五 17:30 台北時間（UTC 09:30）
+  workflow_dispatch:
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -21,19 +23,16 @@ jobs:
       - name: Install dependencies
         run: pip install requests pandas tqdm
 
-      - name: Restore database from cache
-        uses: actions/cache@v4
-        with:
-          path: data/stocks.db
-          key: stocks-db-${{ github.run_number }}
-          restore-keys: stocks-db-
-
-      - name: Run fetch script
+      - name: Fetch data
         run: python fetch/daily_fetch.py
 
-      - name: Save updated database to cache
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: data/stocks.db
-          key: stocks-db-${{ github.run_number }}
+      - name: Calculate signals
+        run: python process/signal_engine.py
+
+      - name: Commit updated database
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/stocks.db
+          git diff --staged --quiet || git commit -m "data: daily update $(date -u +%Y-%m-%d)"
+          git push
