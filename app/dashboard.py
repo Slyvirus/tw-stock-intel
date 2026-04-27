@@ -44,9 +44,26 @@ html, body, [class*="css"] { font-family: -apple-system, BlinkMacSystemFont, "Se
 
 /* 訊號區塊標題 */
 .signal-header-red    { background:#3d1515; border-left:4px solid #ff4d4d;
-                         padding:8px 16px; border-radius:6px; margin:16px 0 8px; }
+                         padding:8px 16px; border-radius:6px; margin:16px 0 8px;
+                         color:#ffffff !important; }
+.signal-header-red  * { color:#ffffff !important; }
 .signal-header-yellow { background:#3d3000; border-left:4px solid #ffd93d;
-                         padding:8px 16px; border-radius:6px; margin:16px 0 8px; }
+                         padding:8px 16px; border-radius:6px; margin:16px 0 8px;
+                         color:#ffffff !important; }
+.signal-header-yellow * { color:#ffffff !important; }
+
+/* 資料來源標注 */
+.source-bar {
+    background: #0d1117;
+    border: 1px solid #2d4a2d;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin: 4px 0 16px;
+    font-size: 0.82rem;
+    color: #7ec87e;
+}
+.source-bar a { color: #4a9eff; text-decoration: none; }
+.source-bar a:hover { text-decoration: underline; }
 
 /* 個股研判卡 */
 .judge-card {
@@ -215,7 +232,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-st.caption(f"資料日期：**{date}**　｜　資料來源：台灣證券交易所")
+date_str_raw = date.replace('-', '')
+st.markdown(f"""
+<div class="source-bar">
+  ✅ <strong>資料來源：台灣證券交易所（TWSE）</strong>　官方三大法人買賣超統計（T86 報表）　｜　資料日期：{date}　｜　每個交易日 17:30 後更新
+  　<a href="https://www.twse.com.tw/zh/fund/T86.html" target="_blank">→ TWSE 官方查詢頁</a>
+  　<a href="https://www.twse.com.tw/rwd/zh/fund/T86?date={date_str_raw}&selectType=ALLBUT0999&response=json" target="_blank">→ 本日原始 JSON</a>
+</div>
+""", unsafe_allow_html=True)
 
 # ── 計數卡 ───────────────────────────────────────────────
 strong = df[df['signal_strength'] == 'strong']
