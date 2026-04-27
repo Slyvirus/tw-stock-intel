@@ -171,6 +171,44 @@ def render_chart(stock_id: str, stock_name: str):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_pie(row: pd.Series):
+    """三大法人買超佔比圓餅圖（僅顯示正數方，即實際買超方）"""
+    labels, values, colors = [], [], []
+    mapping = [
+        ('外資', float(row['foreign_net']), '#4a9eff'),
+        ('投信', float(row['trust_net']),   '#ffd93d'),
+        ('自營商', float(row['dealer_net']), '#6bcb77'),
+    ]
+    for name, val, color in mapping:
+        if val > 0:
+            labels.append(name)
+            values.append(val)
+            colors.append(color)
+
+    if not labels:
+        st.caption("今日三大法人均為賣超，無正向買超佔比可顯示。")
+        return
+
+    fig = go.Figure(go.Pie(
+        labels=labels, values=values,
+        marker=dict(colors=colors),
+        hole=0.45,
+        textinfo='label+percent',
+        textfont=dict(size=13),
+    ))
+    fig.update_layout(
+        title="各法人買超佔比（僅計買超方）",
+        showlegend=False,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#cccccc'),
+        margin=dict(t=50, b=10, l=10, r=10),
+        height=280,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("⚠️ TWSE 僅揭露外資、投信、自營商三大類別合計，無法細分至個別機構名稱（如哪家外資公司）。")
+
+
 def render_judge(row: pd.Series, date: str):
     """個股系統研判區塊（目前為觀察期 placeholder，M5 後升級為建議）"""
     strength = row['signal_strength']
@@ -218,17 +256,20 @@ if df is None or df.empty:
 # ── 使用說明 ─────────────────────────────────────────────
 st.markdown(f"""
 <div class="guide-card">
-  <h3>📖 這工具在看什麼？</h3>
+  <h3>📖 這工具在看什麼？怎麼用？</h3>
   <p>台灣股市有三種大型機構投資人（法人）：<strong>外資</strong>（外國大基金）、
   <strong>投信</strong>（台灣本土基金）、<strong>自營商</strong>（券商自己的錢）。
   他們掌握大量資金與內部研究，動作往往早於一般散戶。</p>
-  <p>這工具每天追蹤哪些股票被多家法人同時買進，篩選出值得關注的訊號：</p>
+  <p><strong>篩選邏輯：</strong>每天自動掃描台灣全市場約 1,300 支上市個股，
+  抓取三大法人當日的買賣超張數，計算哪些個股同時被多家法人買進，
+  再根據強度分級顯示：</p>
   <p>
-    <span class="tag-red">🔴 強訊號</span> 三家法人同時買，或外資連買 5 天以上 → 最優先關注<br>
-    <span class="tag-yellow">🟡 中訊號</span> 外資 + 投信同一天都在買 → 追蹤觀察<br>
-    <span class="tag-grey">⚪ 觀察中</span> 只有一方在買 → 列入候補清單
+    <span class="tag-red">🔴 強訊號</span> 外資＋投信＋自營商三方同日買超，或外資連續買超 5 天以上 → 最優先關注<br>
+    <span class="tag-yellow">🟡 中訊號</span> 外資＋投信同一天都在買，或外資連買 3 天以上 → 值得追蹤<br>
+    <span class="tag-grey">⚪ 觀察中</span> 單邊法人買超（僅外資或僅投信）→ 列入候補清單
   </p>
-  <p class="warning">⚠️ 此工具為決策輔助，非買賣指令。資料為 T+1（前一交易日），每天 17:30 後更新。</p>
+  <p><strong>怎麼用：</strong>看訊號清單 → 選感興趣的個股 → 下方查看法人走勢圖與買超佔比 → 點連結核對 TWSE 官方原始資料。</p>
+  <p class="warning">⚠️ 此工具為決策輔助，非買賣指令。注意：外資／投信／自營商為類別合計，TWSE 不揭露個別機構名稱。資料 T+1，每個交易日 17:30 後自動更新。</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -283,5 +324,10 @@ if selected:
     col_c.metric("自營商買賣超", f"{int(row['dealer_net']):,} 張")
     col_d.metric("外資連買天數", f"{int(row['foreign_consec'])} 日")
 
-    render_chart(stock_id, stock_name)
+    chart_col, pie_col = st.columns([2, 1])
+    with chart_col:
+        render_chart(stock_id, stock_name)
+    with pie_col:
+        render_pie(row)
+
     render_judge(row, date)
