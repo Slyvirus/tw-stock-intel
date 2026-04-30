@@ -100,13 +100,14 @@ html, body, [class*="css"] { font-family: -apple-system, BlinkMacSystemFont, "Se
 """, unsafe_allow_html=True)
 
 DISPLAY_COLS = {
-    'stock_id':       '代號',
-    'stock_name':     '名稱',
-    'foreign_net':    '外資（張）',
-    'trust_net':      '投信（張）',
-    'dealer_net':     '自營（張）',
-    'total_net':      '三大合計（張）',
-    'foreign_consec': '外資連買天數',
+    'stock_id':            '代號',
+    'stock_name':          '名稱',
+    'foreign_net':         '外資（張）',
+    'trust_net':           '投信（張）',
+    'dealer_net':          '自營（張）',
+    'total_net':           '三大合計（張）',
+    'institutional_ratio': '法人參與率',
+    'foreign_consec':      '外資連買天數',
 }
 
 
@@ -143,8 +144,23 @@ def load_history(stock_id: str):
     return df
 
 
+
+
+def fmt_ratio(val) -> str:
+    """格式化法人參與率，>=50% 加 🔥 標示"""
+    try:
+        if val is None or (isinstance(val, float) and __import__('math').isnan(val)):
+            return '-'
+        pct = float(val) * 100
+        return f'🔥 {pct:.1f}%' if pct >= 50 else f'{pct:.1f}%'
+    except Exception:
+        return '-'
+
 def render_table(sub_df: pd.DataFrame):
-    display = sub_df[list(DISPLAY_COLS.keys())].rename(columns=DISPLAY_COLS)
+    cols    = [c for c in DISPLAY_COLS.keys() if c in sub_df.columns]
+    display = sub_df[cols].rename(columns=DISPLAY_COLS)
+    if '法人參與率' in display.columns:
+        display['法人參與率'] = display['法人參與率'].apply(fmt_ratio)
     st.dataframe(display, use_container_width=True, hide_index=True)
 
 
@@ -346,11 +362,15 @@ SELL_COLS = {
     'trust_net':           '投信（張）',
     'dealer_net':          '自營（張）',
     'total_net':           '三大合計（張）',
+    'institutional_ratio': '法人參與率',
     'foreign_sell_consec': '外資連賣天數',
 }
 
 def render_sell_table(sub_df):
-    display = sub_df[list(SELL_COLS.keys())].rename(columns=SELL_COLS)
+    cols    = [c for c in SELL_COLS.keys() if c in sub_df.columns]
+    display = sub_df[cols].rename(columns=SELL_COLS)
+    if '法人參與率' in display.columns:
+        display['法人參與率'] = display['法人參與率'].apply(fmt_ratio)
     st.dataframe(display, use_container_width=True, hide_index=True)
 
 if not sell_s.empty:
@@ -383,6 +403,16 @@ if selected:
     col_b.metric("投信買賣超",  f"{int(row['trust_net']):,} 張")
     col_c.metric("自營商買賣超", f"{int(row['dealer_net']):,} 張")
     col_d.metric("外資連買天數", f"{int(row['foreign_consec'])} 日")
+
+    ratio_raw = row.get('institutional_ratio', None)
+    if ratio_raw is not None and str(ratio_raw) not in ('', 'nan', 'None'):
+        pct = float(ratio_raw) * 100
+        ratio_str = f'🔥 {pct:.1f}%' if pct >= 50 else f'{pct:.1f}%'
+        st.metric(
+            "📊 法人參與率",
+            ratio_str,
+            help="法人三大合計買賣超張數 / 當日成交量。🔥 ≥50%：法人主導行情，成交集中；<20%：散戶為主要驅動力。"
+        )
 
     chart_col, pie_col = st.columns([2, 1])
     with chart_col:
