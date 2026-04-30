@@ -1,6 +1,6 @@
 """
 信號計算引擎
-從 institutional_data 表計算法人買超／賣超訊號，結果存入 signals 表
+從 institutional_data 計算法人買超／賣超訊號 + 法人參與率，結果存入 signals 表
 """
 
 import sqlite3
@@ -8,34 +8,35 @@ import pandas as pd
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
-DB_PATH = BASE_DIR / 'data' / 'stocks.db'
+DB_PATH  = BASE_DIR / 'data' / 'stocks.db'
 
 
 def init_signals_table():
     conn = sqlite3.connect(DB_PATH)
-    # 若欄位不足（舊 schema）則重建
-    cur = conn.execute("PRAGMA table_info(signals)")
+    cur  = conn.execute("PRAGMA table_info(signals)")
     existing = {row[1] for row in cur.fetchall()}
-    if 'sell_strength' not in existing:
+    if 'sell_strength' not in existing or 'institutional_ratio' not in existing:
         conn.execute('DROP TABLE IF EXISTS signals')
     conn.execute('''
         CREATE TABLE IF NOT EXISTS signals (
-            date                TEXT NOT NULL,
-            stock_id            TEXT NOT NULL,
-            stock_name          TEXT,
-            foreign_net         INTEGER,
-            trust_net           INTEGER,
-            dealer_net          INTEGER,
-            total_net           INTEGER,
-            foreign_consec      INTEGER DEFAULT 0,
-            trust_consec        INTEGER DEFAULT 0,
-            foreign_sell_consec INTEGER DEFAULT 0,
-            cross_buy           INTEGER DEFAULT 0,
-            all_three_buy       INTEGER DEFAULT 0,
-            cross_sell          INTEGER DEFAULT 0,
-            all_three_sell      INTEGER DEFAULT 0,
-            signal_strength     TEXT,
-            sell_strength       TEXT,
+            date                 TEXT NOT NULL,
+            stock_id             TEXT NOT NULL,
+            stock_name           TEXT,
+            foreign_net          INTEGER,
+            trust_net            INTEGER,
+            dealer_net           INTEGER,
+            total_net            INTEGER,
+            volume               INTEGER,
+            institutional_ratio  REAL,
+            foreign_consec       INTEGER DEFAULT 0,
+            trust_consec         INTEGER DEFAULT 0,
+            foreign_sell_consec  INTEGER DEFAULT 0,
+            cross_buy            INTEGER DEFAULT 0,
+            all_three_buy        INTEGER DEFAULT 0,
+            cross_sell           INTEGER DEFAULT 0,
+            all_three_sell       INTEGER DEFAULT 0,
+            signal_strength      TEXT,
+            sell_strength        TEXT,
             PRIMARY KEY (date, stock_id)
         )
     ''')
@@ -44,7 +45,6 @@ def init_signals_table():
 
 
 def compute_consecutive_all(conn, as_of_date: str) -> pd.DataFrame:
-    """批量計算各股連續買超／賣超天數"""
     df = pd.read_sql_query(
         """SELECT date, stock_id, foreign_net, trust_net
            FROM institutional_data
@@ -84,7 +84,7 @@ def compute_consecutive_all(conn, as_of_date: str) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def classify_buy(row) -> str | None:
+def classify_buy(row) -> 'str | None':
     if row['all_three_buy'] or row['foreign_consec'] >= 5:
         return 'strong'
     if row['cross_buy'] or row['foreign_consec'] >= 3:
@@ -94,7 +94,7 @@ def classify_buy(row) -> str | None:
     return None
 
 
-def classify_sell(row) -> str | None:
+def classify_sell(row) -> 'str | None':
     if row['all_three_sell'] or row['foreign_sell_consec'] >= 5:
         return 'strong'
     if row['cross_sell'] or row['foreign_sell_consec'] >= 3:
@@ -104,11 +104,21 @@ def classify_sell(row) -> str | None:
     return None
 
 
+def compute_ratio(total_net: int, volume) -> 'float | None':
+    try:
+        v = float(volume)
+        if v <= 0:
+            return None
+        return round(abs(float(total_net)) / v, 4)
+    except (TypeError, ValueError):
+        return None
+
+
 def calculate_signals(date: str = None):
     conn = sqlite3.connect(DB_PATH)
 
     if date is None:
-        row = conn.execute("SELECT MAX(date) FROM institutional_data").fetchone()
+        row  = conn.execute("SELECT MAX(date) FROM institutional_data").fetchone()
         date = row[0] if row else None
 
     if not date:
@@ -131,28 +141,45 @@ def calculate_signals(date: str = None):
     for col in ['foreign_consec', 'trust_consec', 'foreign_sell_consec']:
         df[col] = df[col].astype(int)
 
+    # 法人參與率
+    vol_col = df['volume'] if 'volume' in df.columns else None
+    if vol_col is not None:
+        df['institutional_ratio'] = df.apply(
+            lambda r: compute_ratio(r['total_net'], r['volume']), axis=1
+        )
+    else:
+        df['institutional_ratio'] = None
+
     # 買超訊號
     df['cross_buy']     = ((df['foreign_net'] > 0) & (df['trust_net'] > 0)).astype(int)
-    df['all_three_buy'] = ((df['foreign_net'] > 0) & (df['trust_net'] > 0) & (df['dealer_net'] > 0)).astype(int)
+    df['all_three_buy'] = (
+        (df['foreign_net'] > 0) & (df['trust_net'] > 0) & (df['dealer_net'] > 0)
+    ).astype(int)
     df['signal_strength'] = df.apply(classify_buy, axis=1)
 
     # 賣超訊號
     df['cross_sell']     = ((df['foreign_net'] < 0) & (df['trust_net'] < 0)).astype(int)
-    df['all_three_sell'] = ((df['foreign_net'] < 0) & (df['trust_net'] < 0) & (df['dealer_net'] < 0)).astype(int)
-    df['sell_strength']  = df.apply(classify_sell, axis=1)
+    df['all_three_sell'] = (
+        (df['foreign_net'] < 0) & (df['trust_net'] < 0) & (df['dealer_net'] < 0)
+    ).astype(int)
+    df['sell_strength'] = df.apply(classify_sell, axis=1)
 
-    # 有任一訊號才存入
     signals = df[df['signal_strength'].notna() | df['sell_strength'].notna()].copy()
 
     conn.execute("DELETE FROM signals WHERE date=?", (date,))
-    signals[[
+
+    out_cols = [
         'date', 'stock_id', 'stock_name',
         'foreign_net', 'trust_net', 'dealer_net', 'total_net',
+        'volume', 'institutional_ratio',
         'foreign_consec', 'trust_consec', 'foreign_sell_consec',
         'cross_buy', 'all_three_buy',
         'cross_sell', 'all_three_sell',
         'signal_strength', 'sell_strength',
-    ]].to_sql('signals', conn, if_exists='append', index=False)
+    ]
+    signals[[c for c in out_cols if c in signals.columns]].to_sql(
+        'signals', conn, if_exists='append', index=False
+    )
     conn.commit()
     conn.close()
 
@@ -173,8 +200,7 @@ def calculate_signals(date: str = None):
 if __name__ == '__main__':
     init_signals_table()
 
-    # schema 更新後重算所有已有日期
-    conn = sqlite3.connect(DB_PATH)
+    conn      = sqlite3.connect(DB_PATH)
     all_dates = pd.read_sql_query(
         "SELECT DISTINCT date FROM institutional_data ORDER BY date", conn
     )['date'].tolist()
