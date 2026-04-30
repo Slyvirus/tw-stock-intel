@@ -294,33 +294,6 @@ if df is None or df.empty:
     st.warning("⏳ 尚無資料，每週一至週五 17:30 後自動更新，請稍後再來。")
     st.stop()
 
-# ── 使用說明 ─────────────────────────────────────────────
-st.markdown(f"""
-<div class="guide-card">
-  <h3>📖 這工具在看什麼？怎麼用？</h3>
-  <p>台灣股市有三種大型機構投資人（法人）：<strong>外資</strong>（外國大基金）、
-  <strong>投信</strong>（台灣本土基金）、<strong>自營商</strong>（券商自己的錢）。
-  他們掌握大量資金與內部研究，動作往往早於一般散戶。</p>
-  <p><strong>篩選邏輯：</strong>每天自動掃描台灣全市場約 1,300 支上市個股，
-  抓取三大法人當日的買賣超張數，計算哪些個股同時被多家法人買進，
-  再根據強度分級顯示：</p>
-  <p><strong>▲ 買超訊號（法人正在進場）：</strong></p>
-  <p>
-    <span class="tag-red">🔴 強買訊號</span> 外資＋投信＋自營商三方同日買超，或外資連續買超 5 天以上 → 最優先關注<br>
-    <span class="tag-yellow">🟡 中買訊號</span> 外資＋投信同一天都在買，或外資連買 3 天以上 → 值得追蹤<br>
-    <span class="tag-grey">⚪ 買超觀察</span> 單邊法人買超（僅外資或僅投信）→ 列入候補清單
-  </p>
-  <p><strong>▼ 賣超訊號（法人正在出場，留意風險）：</strong></p>
-  <p>
-    <span style="color:#4a9eff;font-weight:600;">🔵 強賣訊號</span> 外資＋投信＋自營商三方同日賣超，或外資連續賣超 5 天以上 → 避開或減碼參考<br>
-    <span style="color:#22d3ee;font-weight:600;">🔷 中賣訊號</span> 外資＋投信同一天都在賣，或外資連賣 3 天以上 → 觀察是否持續<br>
-    <span style="color:#666;font-weight:600;">○ 賣超觀察</span> 單邊法人賣超 → 注意但不必過度反應
-  </p>
-  <p><strong>怎麼用：</strong>看訊號清單 → 選感興趣的個股 → 下方查看法人走勢圖與買賣超佔比 → 點連結核對 TWSE 官方原始資料。</p>
-  <p class="warning">⚠️ 此工具為決策輔助，非買賣指令。注意：外資／投信／自營商為類別合計，TWSE 不揭露個別機構名稱。資料 T+1，每個交易日 17:30 後自動更新。</p>
-</div>
-""", unsafe_allow_html=True)
-
 date_str_raw = date.replace('-', '')
 st.markdown(f"""
 <div class="source-bar">
@@ -418,3 +391,32 @@ if selected:
         render_pie(row)
 
     render_judge(row, date)
+
+st.divider()
+# ── 使用說明 ─────────────────────────────────────────────
+st.markdown(f"""
+<div class="guide-card">
+  <h3>📖 這工具在看什麼？怎麼用？</h3>
+  <p>台灣股市有三種大型機構投資人（法人）：<strong>外資</strong>（外國大基金）、
+  <strong>投信</strong>（台灣本土基金）、<strong>自營商</strong>（券商自己的錢）。
+  他們掌握大量資金與內部研究，動作往往早於一般散戶。</p>
+  <p><strong>篩選邏輯：</strong>每天自動掃描台灣全市場約 1,300 支上市個股，
+  抓取三大法人當日的買賣超張數，計算哪些個股同時被多家法人買進，
+  再根據強度分級顯示：</p>
+  <p><strong>▲ 買超訊號（法人正在進場）：</strong></p>
+  <p>
+    <span class="tag-red">🔴 強買訊號</span> 外資＋投信＋自營商三方同日買超，或外資連續買超 5 天以上 → 最優先關注<br>
+    <span class="tag-yellow">🟡 中買訊號</span> 外資＋投信同一天都在買，或外資連買 3 天以上 → 值得追蹤<br>
+    <span class="tag-grey">⚪ 買超觀察</span> 單邊法人買超（僅外資或僅投信）→ 列入候補清單
+  </p>
+  <p><strong>▼ 賣超訊號（法人正在出場，留意風險）：</strong></p>
+  <p>
+    <span style="color:#4a9eff;font-weight:600;">🔵 強賣訊號</span> 外資＋投信＋自營商三方同日賣超，或外資連續賣超 5 天以上 → 避開或減碼參考<br>
+    <span style="color:#22d3ee;font-weight:600;">🔷 中賣訊號</span> 外資＋投信同一天都在賣，或外資連賣 3 天以上 → 觀察是否持續<br>
+    <span style="color:#666;font-weight:600;">○ 賣超觀察</span> 單邊法人賣超 → 注意但不必過度反應
+  </p>
+  <p><strong>怎麼用：</strong>看訊號清單 → 選感興趣的個股 → 下方查看法人走勢圖與買賣超佔比 → 點連結核對 TWSE 官方原始資料。</p>
+  <p class="warning">⚠️ 此工具為決策輔助，非買賣指令。注意：外資／投信／自營商為類別合計，TWSE 不揭露個別機構名稱。資料 T+1，每個交易日 17:30 後自動更新。</p>
+</div>
+""", unsafe_allow_html=True)
+
