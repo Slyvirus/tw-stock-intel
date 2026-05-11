@@ -144,6 +144,19 @@ def load_history(stock_id: str):
     return df
 
 
+@st.cache_data(ttl=300)
+def load_all_stocks():
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    conn = sqlite3.connect(DB_PATH)
+    df_all = pd.read_sql_query(
+        "SELECT DISTINCT stock_id, stock_name FROM institutional_data ORDER BY stock_id",
+        conn
+    )
+    conn.close()
+    return df_all
+
+
 
 
 def fmt_ratio(val) -> str:
@@ -388,39 +401,71 @@ if not sell_w.empty:
 # ── 個股詳細 ─────────────────────────────────────────────
 st.divider()
 st.subheader("🔍 個股詳細查詢")
+st.caption("可搜尋全市場約 1,300 支個股（含今日無法人訊號個股）")
 
-options = df.apply(lambda r: f"{r['stock_id']}  {r['stock_name']}", axis=1).tolist()
-selected = st.selectbox("選擇個股", options, label_visibility="collapsed")
+all_stocks = load_all_stocks()
 
-if selected:
-    parts      = selected.split()
-    stock_id   = parts[0]
-    stock_name = parts[1] if len(parts) > 1 else ''
-    row        = df[df['stock_id'] == stock_id].iloc[0]
+search_query = st.text_input(
+    "搜尋股票",
+    placeholder="輸入代號或名稱，例：2330 或 台積電",
+    label_visibility="collapsed",
+)
 
-    col_a, col_b, col_c, col_d = st.columns(4)
-    col_a.metric("外資買賣超",  f"{int(row['foreign_net']):,} 張")
-    col_b.metric("投信買賣超",  f"{int(row['trust_net']):,} 張")
-    col_c.metric("自營商買賣超", f"{int(row['dealer_net']):,} 張")
-    col_d.metric("外資連買天數", f"{int(row['foreign_consec'])} 日")
+if search_query.strip():
+    q = search_query.strip()
+    mask = (
+        all_stocks['stock_id'].str.contains(q, case=False, na=False) |
+        all_stocks['stock_name'].str.contains(q, case=False, na=False)
+    )
+    filtered_stocks = all_stocks[mask]
+else:
+    filtered_stocks = all_stocks
 
-    ratio_raw = row.get('institutional_ratio', None)
-    if ratio_raw is not None and str(ratio_raw) not in ('', 'nan', 'None'):
-        pct = float(ratio_raw) * 100
-        ratio_str = f'🔥 {pct:.1f}%' if pct >= 50 else f'{pct:.1f}%'
-        st.metric(
-            "📊 法人參與率",
-            ratio_str,
-            help="法人三大合計買賣超張數 / 當日成交量。🔥 ≥50%：法人主導行情，成交集中；<20%：散戶為主要驅動力。"
-        )
+if filtered_stocks.empty:
+    st.info(f"找不到「{search_query}」，請嘗試其他代號或名稱")
+else:
+    stock_options = filtered_stocks.apply(
+        lambda r: f"{r['stock_id']}  {r['stock_name']}", axis=1
+    ).tolist()
+    selected = st.selectbox("選擇個股", stock_options, label_visibility="collapsed")
 
-    chart_col, pie_col = st.columns([2, 1])
-    with chart_col:
-        render_chart(stock_id, stock_name)
-    with pie_col:
-        render_pie(row)
+    if selected:
+        parts      = selected.split()
+        stock_id   = parts[0]
+        stock_name = parts[1] if len(parts) > 1 else ''
 
-    render_judge(row, date)
+        signal_rows = df[df['stock_id'] == stock_id]
+        has_signal  = not signal_rows.empty
+
+        if has_signal:
+            row = signal_rows.iloc[0]
+
+            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a.metric("外資買賣超",  f"{int(row['foreign_net']):,} 張")
+            col_b.metric("投信買賣超",  f"{int(row['trust_net']):,} 張")
+            col_c.metric("自營商買賣超", f"{int(row['dealer_net']):,} 張")
+            col_d.metric("外資連買天數", f"{int(row['foreign_consec'])} 日")
+
+            ratio_raw = row.get('institutional_ratio', None)
+            if ratio_raw is not None and str(ratio_raw) not in ('', 'nan', 'None'):
+                pct = float(ratio_raw) * 100
+                ratio_str = f'🔥 {pct:.1f}%' if pct >= 50 else f'{pct:.1f}%'
+                st.metric(
+                    "📊 法人參與率",
+                    ratio_str,
+                    help="法人三大合計買賣超張數 / 當日成交量。🔥 ≥50%：法人主導行情，成交集中；<20%：散戶為主要驅動力。"
+                )
+
+            chart_col, pie_col = st.columns([2, 1])
+            with chart_col:
+                render_chart(stock_id, stock_name)
+            with pie_col:
+                render_pie(row)
+
+            render_judge(row, date)
+        else:
+            st.info(f"📊 **{stock_id} {stock_name}**：今日無法人訊號（不在強買／強賣清單），顯示歷史走勢供參考")
+            render_chart(stock_id, stock_name)
 
 st.divider()
 # ── 使用說明 ─────────────────────────────────────────────
