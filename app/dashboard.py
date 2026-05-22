@@ -322,6 +322,14 @@ def _suggestion_html(row: pd.Series) -> str:
                 '多方法人賣超，建議觀察是否持續，考慮降低持倉比重。'
             )
 
+    # ── 低法人主導警示 ──────────────────────────────────────
+    if pd.notna(sell_str) and sell_str in ('strong', 'medium') and 0 < ratio < 0.10:
+        parts.append(
+            f'<span style="color:#f59e0b;">⚠️ 低法人主導（參與率 {ratio*100:.1f}%）：</span>'
+            f'外資買賣超張數佔日成交量不足 10%，散戶為主要驅動力。'
+            f'此賣超訊號可靠性較低，建議搭配股價走勢與成交量交叉確認，勿單獨作為出場依據。'
+        )
+
     if not parts:
         return ''
 
@@ -454,8 +462,13 @@ SELL_COLS = {
 }
 
 def render_sell_table(sub_df):
+    low_flag = sub_df['institutional_ratio'].apply(
+        lambda x: '⚠️ 低' if (x is not None and not pd.isna(x) and 0 < float(x or 0) < 0.10) else '—'
+    ) if 'institutional_ratio' in sub_df.columns else pd.Series(['—'] * len(sub_df), index=sub_df.index)
+
     cols    = [c for c in SELL_COLS.keys() if c in sub_df.columns]
     display = sub_df[cols].rename(columns=SELL_COLS)
+    display.insert(2, '主導性', low_flag.values)
     if '法人參與率' in display.columns:
         display['法人參與率'] = display['法人參與率'].apply(fmt_ratio)
     st.dataframe(display, use_container_width=True, hide_index=True)
