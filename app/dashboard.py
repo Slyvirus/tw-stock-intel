@@ -257,6 +257,78 @@ def render_pie(row: pd.Series):
     st.caption("⚠️ TWSE 僅揭露三大類別合計，無法細分至個別機構名稱。")
 
 
+def _suggestion_html(row: pd.Series) -> str:
+    """根據信號強度與法人數據，產出進出場參考文字（HTML 字串）。"""
+    buy_str  = row.get('signal_strength', None)
+    sell_str = row.get('sell_strength', None)
+    ratio    = float(row.get('institutional_ratio', 0) or 0)
+    f_c      = int(row.get('foreign_consec', 0))
+    f_sc     = int(row.get('foreign_sell_consec', 0))
+    all_buy  = bool(row.get('all_three_buy', 0))
+    cross_b  = bool(row.get('cross_buy', 0))
+    all_sell = bool(row.get('all_three_sell', 0))
+
+    parts = []
+
+    # ── 買超建議 ──────────────────────────────────────────
+    if pd.notna(buy_str) and buy_str == 'strong':
+        if ratio >= 0.5 and f_c >= 5:
+            parts.append(
+                f'<span style="color:#6bcb77;">▲ 進場參考（高關注）：</span>'
+                f'法人主導行情（參與率 {ratio*100:.0f}%），外資連買 {f_c} 日，'
+                f'動能持續確認。可列入觀察名單，等量縮或回檔再評估介入時機。'
+            )
+        elif all_buy and f_c >= 3:
+            parts.append(
+                f'<span style="color:#6bcb77;">▲ 進場參考（中關注）：</span>'
+                f'三大法人共識布局，外資連買 {f_c} 日，趨勢確立信號。'
+                f'建議觀察 3 日確認持續性。'
+            )
+        elif cross_b or f_c >= 5:
+            parts.append(
+                f'<span style="color:#6bcb77;">▲ 進場參考（觀察）：</span>'
+                f'外資＋投信同步入場或外資連買 {f_c} 日，初步動能出現。'
+                f'建議搭配成交量確認。'
+            )
+        else:
+            parts.append(
+                '<span style="color:#888;">▲ 進場參考：</span>'
+                '單邊強買，需搭配其他指標確認趨勢方向。'
+            )
+
+    elif pd.notna(buy_str) and buy_str == 'medium':
+        parts.append(
+            '<span style="color:#888;">▲ 進場參考：</span>'
+            '中買訊號，趨勢初現，建議先觀察 1–2 日確認動能延續再考慮介入。'
+        )
+
+    # ── 賣超建議 ──────────────────────────────────────────
+    if pd.notna(sell_str) and sell_str == 'strong':
+        if ratio >= 0.5 and f_sc >= 5:
+            parts.append(
+                f'<span style="color:#ff8080;">▼ 出場參考（高風險）：</span>'
+                f'法人大幅減碼（參與率 {ratio*100:.0f}%），外資連賣 {f_sc} 日，'
+                f'下行壓力明顯。持倉者建議審視停損設定。'
+            )
+        elif all_sell or f_sc >= 7:
+            parts.append(
+                f'<span style="color:#ff8080;">▼ 出場參考（注意）：</span>'
+                f'三大法人同步減碼或外資連賣 {f_sc} 日，中期趨勢偏弱。'
+                f'建議減輕部位或觀望。'
+            )
+        else:
+            parts.append(
+                '<span style="color:#ff8080;">▼ 出場參考：</span>'
+                '多方法人賣超，建議觀察是否持續，考慮降低持倉比重。'
+            )
+
+    if not parts:
+        return ''
+
+    inner = '<br>'.join(parts)
+    return f'<p class="judge-note" style="margin-top:10px;">{inner}</p>'
+
+
 def render_judge(row: pd.Series, date: str):
     """個股系統研判區塊（買超或賣超均適用）"""
     buy_str  = row.get('signal_strength', None)
@@ -298,15 +370,17 @@ def render_judge(row: pd.Series, date: str):
             obs.append(f"外資連續賣超 {f_sc} 日")
 
     obs_text = "、".join(obs) if obs else "單邊法人動作"
+    suggestion = _suggestion_html(row)
 
     st.markdown(f"""
 <div class="judge-card">
   <h4>📋 系統研判</h4>
   {badges_html}
   <p style="color:#ccc; font-size:0.88rem; margin:10px 0 4px;">觀察到：{obs_text}</p>
-  <p class="judge-note">
-    ⚠️ 目前處於資料累積期，進出場建議將在 4 週資料驗證後啟用。<br>
-    建議搭配 <a href="https://www.twse.com.tw/rwd/zh/fund/T86?date={date.replace('-','')}&selectType=ALLBUT0999&response=json"
+  {suggestion}
+  <p class="judge-note" style="margin-top:8px; color:#666; font-size:0.78rem;">
+    ⚠️ 以上為法人行為數據推論，非投資建議，不構成買賣指令。請搭配
+    <a href="https://www.twse.com.tw/rwd/zh/fund/T86?date={date.replace('-','')}&selectType=ALLBUT0999&response=json"
     target="_blank" style="color:#4a9eff;">TWSE 原始資料</a> 自行判斷。
   </p>
 </div>
