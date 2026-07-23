@@ -399,6 +399,19 @@ def render_judge(row: pd.Series, date: str):
 
 st.title("📊 台灣股市法人追蹤")
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import margin_view
+
+tab_inst, tab_margin = st.tabs(["🏦 法人買賣超追蹤", "🔥 融資斷頭監測"])
+
+# 融資監測分頁：自成一體，先渲染（不受法人資料有無影響）
+margin_view.render(DB_PATH, tab_margin)
+
+# 法人買賣超分頁：手動開啟 tab context，把以下既有內容全部收進此分頁
+# （用 __enter__/__exit__ 取代 with 區塊，避免大規模縮排既有程式碼）
+tab_inst.__enter__()
+
 df, date = load_signals()
 
 if df is None or df.empty:
@@ -581,4 +594,7 @@ st.markdown(f"""
   <p class="warning">⚠️ 此工具為決策輔助，非買賣指令。注意：外資／投信／自營商為類別合計，TWSE 不揭露個別機構名稱。資料 T+1，每個交易日 17:30 後自動更新。</p>
 </div>
 """, unsafe_allow_html=True)
+
+# 關閉法人分頁 tab context
+tab_inst.__exit__(None, None, None)
 

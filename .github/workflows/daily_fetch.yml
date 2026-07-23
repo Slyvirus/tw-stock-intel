@@ -29,6 +29,15 @@ jobs:
       - name: Calculate signals
         run: python process/signal_engine.py
 
+      - name: Fetch margin / short-sale monitor
+        run: python fetch/margin_fetch.py
+
+      - name: Daily market summary (Telegram)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python process/daily_summary.py
+
       - name: Commit updated database
         run: |
           git config user.name  "github-actions[bot]"
